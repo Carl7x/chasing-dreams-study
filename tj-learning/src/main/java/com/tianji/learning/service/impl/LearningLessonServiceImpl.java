@@ -195,7 +195,7 @@ public class LearningLessonServiceImpl extends ServiceImpl<LearningLessonMapper,
         //3.校验课程状态
         LocalDateTime expireTime = lesson.getExpireTime();
         LocalDateTime now = LocalDateTime.now();
-        if(now.isBefore(expireTime)){
+        if(expireTime!=null && now.isBefore(expireTime)){
             return null;
         }
         return lesson.getId();

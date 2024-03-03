@@ -1,7 +1,11 @@
 package com.tianji.learning.service.impl;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.tianji.api.client.course.CatalogueClient;
 import com.tianji.api.client.course.CourseClient;
+import com.tianji.api.dto.course.CataSimpleInfoDTO;
+import com.tianji.api.dto.course.CourseFullInfoDTO;
+import com.tianji.api.dto.course.CourseSearchDTO;
 import com.tianji.api.dto.course.CourseSimpleInfoDTO;
 import com.tianji.common.domain.dto.PageDTO;
 import com.tianji.common.domain.query.PageQuery;
@@ -10,6 +14,7 @@ import com.tianji.common.exceptions.BizIllegalException;
 import com.tianji.common.utils.BeanUtils;
 import com.tianji.common.utils.CollUtils;
 import com.tianji.common.utils.UserContext;
+import com.tianji.learning.LessonStatus;
 import com.tianji.learning.domain.po.LearningLesson;
 import com.tianji.learning.domain.vo.LearningLessonVO;
 import com.tianji.learning.mapper.LearningLessonMapper;
@@ -41,6 +46,7 @@ public class LearningLessonServiceImpl extends ServiceImpl<LearningLessonMapper,
 
     //注入feign api
     final CourseClient courseClient;
+    final CatalogueClient catalogueClient;
 
     /**
      * 保存课程到课表
@@ -100,7 +106,7 @@ public class LearningLessonServiceImpl extends ServiceImpl<LearningLessonMapper,
                 .stream().map(LearningLesson::getCourseId)
                 .collect(Collectors.toList());
         List<CourseSimpleInfoDTO> simpleInfoList = courseClient.getSimpleInfoList(courseIds);
-        if(CollectionUtils.isEmpty(simpleInfoList)){
+        if (CollectionUtils.isEmpty(simpleInfoList)) {
             throw new BizIllegalException("课程不存在");
         }
         //将课程信息放进map里
@@ -111,7 +117,7 @@ public class LearningLessonServiceImpl extends ServiceImpl<LearningLessonMapper,
         for (LearningLesson record : records) {
             LearningLessonVO learningLessonVO = BeanUtils.copyBean(record, LearningLessonVO.class);
             CourseSimpleInfoDTO infoDTO = infoDTOMap.get(record.getCourseId());
-            if(infoDTO!=null){
+            if (infoDTO != null) {
                 learningLessonVO.setCourseName(infoDTO.getName());
                 learningLessonVO.setCourseCoverUrl(infoDTO.getCoverUrl());
                 learningLessonVO.setSections(infoDTO.getSectionNum());
@@ -120,6 +126,99 @@ public class LearningLessonServiceImpl extends ServiceImpl<LearningLessonMapper,
         }
         //5.封装返回
         //new PageDTO<>()
-        return PageDTO.of(page,voList);
+        return PageDTO.of(page, voList);
+    }
+
+    /**
+     * 返回当前学习课程
+     *
+     * @return
+     */
+    @Override
+    public LearningLessonVO queryMyCurrentLesson() {
+        //1.获取当前用户
+        Long user = UserContext.getUser();
+        //2.最近学习课程 DESC （课程状态 = 1 正在学习中的）
+        LearningLesson lesson = this.lambdaQuery()
+                .eq(LearningLesson::getUserId, user)
+                .eq(LearningLesson::getStatus, LessonStatus.LEARNING)
+                .orderByDesc(LearningLesson::getLatestLearnTime)
+                .last("limit 1")
+                .one();
+        if (lesson == null) {
+            return null;
+        }
+        //3.调用feign课程信息
+        CourseFullInfoDTO courseInfoById = courseClient
+                .getCourseInfoById(lesson.getCourseId(), false, false);
+        if (courseInfoById==null){
+            throw new BizIllegalException("课程不存在");
+        }
+        //4.查询用户课表课程总数
+        Integer count = this.lambdaQuery().eq(LearningLesson::getUserId, user).count();
+        //5.调用feign 获取课程小结名称和编号
+        List<CataSimpleInfoDTO> cataSimpleInfoDTOS = catalogueClient
+                .batchQueryCatalogue(CollUtils.singletonList(lesson.getLatestSectionId()));
+        if(CollUtils.isEmpty(cataSimpleInfoDTOS)){
+            throw new BizIllegalException("小节不存在");
+        }
+        //6.将po封装到vo 填充
+        LearningLessonVO vo = BeanUtils.copyBean(lesson, LearningLessonVO.class);
+        vo.setCourseName(courseInfoById.getName());
+        vo.setCourseCoverUrl(courseInfoById.getCoverUrl());
+        vo.setSections(courseInfoById.getSectionNum());
+        vo.setCourseAmount(count);
+        //设置小节信息
+        CataSimpleInfoDTO cataSimpleInfoDTO = cataSimpleInfoDTOS.get(0);
+        vo.setLatestSectionName(cataSimpleInfoDTO.getName());
+        vo.setLatestSectionIndex(cataSimpleInfoDTO.getCIndex());
+        return vo;
+    }
+
+    /**
+     * 查询当前用户指定课程的学习进度
+     * @param courseId 课程id
+     * @return 课表信息、学习记录及进度信息
+     */
+    @Override
+    public Long isLessonValid(Long courseId) {
+        //1.获取用户
+        Long user = UserContext.getUser();
+        //2.获取课表
+        LearningLesson lesson = this.lambdaQuery()
+                .eq(LearningLesson::getUserId, user)
+                .eq(LearningLesson::getCourseId, courseId)
+                .one();
+        if(lesson==null){
+            return null;
+        }
+        //3.校验课程状态
+        LocalDateTime expireTime = lesson.getExpireTime();
+        LocalDateTime now = LocalDateTime.now();
+        if(now.isBefore(expireTime)){
+            return null;
+        }
+        return lesson.getId();
+    }
+
+    /**
+     * 查询用户课表中指定课程状态
+     * @param courseId
+     * @return
+     */
+    @Override
+    public LearningLessonVO queryLessonByCourseId(Long courseId) {
+        //1.获取用户
+        Long user = UserContext.getUser();
+        //2.获取课表
+        LearningLesson lesson = this.lambdaQuery()
+                .eq(LearningLesson::getUserId, user)
+                .eq(LearningLesson::getCourseId, courseId)
+                .one();
+        if(lesson==null){
+            return null;
+        }
+        //3.封装vo
+        return BeanUtils.copyBean(lesson, LearningLessonVO.class);
     }
 }

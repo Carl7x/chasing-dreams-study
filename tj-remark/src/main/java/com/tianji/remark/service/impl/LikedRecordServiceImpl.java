@@ -1,5 +1,6 @@
 package com.tianji.remark.service.impl;
 
+import com.tianji.api.dto.msg.LikedTimesDTO;
 import com.tianji.common.autoconfigure.mq.RabbitMqHelper;
 import com.tianji.common.constants.MqConstants;
 import com.tianji.common.utils.StringUtils;

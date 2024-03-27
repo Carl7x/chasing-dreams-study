@@ -3,6 +3,7 @@ package com.tianji.remark.service.impl;
 import com.tianji.api.dto.msg.LikedTimesDTO;
 import com.tianji.common.autoconfigure.mq.RabbitMqHelper;
 import com.tianji.common.constants.MqConstants;
+import com.tianji.common.utils.CollUtils;
 import com.tianji.common.utils.StringUtils;
 import com.tianji.common.utils.UserContext;
 import com.tianji.remark.domain.dto.LikeRecordFormDTO;
@@ -71,6 +72,7 @@ public class LikedRecordServiceImpl extends ServiceImpl<LikedRecordMapper, Liked
         if (record == null) {
             return false;
         }
+        //从db中删除
         boolean result = this.removeById(record.getId());
         return result;
     }
@@ -87,16 +89,21 @@ public class LikedRecordServiceImpl extends ServiceImpl<LikedRecordMapper, Liked
         likedRecord.setBizId(likeRecordFormDTO.getBizId());
         likedRecord.setBizType(likeRecordFormDTO.getBizType());
         likedRecord.setUserId(user);
+        //保存到db
         boolean result = this.save(likedRecord);
         return result;
     }
 
     /**
      * 批量获取用户点赞信息
+     *
      * @param bizIds
      */
     @Override
     public Set<Long> getLikesByBizIds(List<Long> bizIds) {
+        if (CollUtils.isEmpty(bizIds)) {
+            return CollUtils.emptySet();
+        }
         Long user = UserContext.getUser();
         List<LikedRecord> list = this.lambdaQuery()
                 .eq(LikedRecord::getUserId, user)
@@ -104,5 +111,15 @@ public class LikedRecordServiceImpl extends ServiceImpl<LikedRecordMapper, Liked
                 .list();
         Set<Long> likeList = list.stream().map(LikedRecord::getBizId).collect(Collectors.toSet());
         return likeList;
+    }
+
+    @Override
+    public void readLikedTimesAndSentMsg(String bizType, int maxBizSize) {
+
+    }
+
+    @Override
+    public Set<Long> isBizLiked(List<Long> answerId) {
+        return null;
     }
 }

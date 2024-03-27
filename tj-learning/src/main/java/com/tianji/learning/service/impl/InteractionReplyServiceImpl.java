@@ -2,6 +2,7 @@ package com.tianji.learning.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.OrderItem;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.tianji.api.client.remark.RemarkClient;
 import com.tianji.api.client.user.UserClient;
 import com.tianji.api.dto.user.UserDTO;
 import com.tianji.common.constants.Constant;
@@ -44,6 +45,7 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
 
     final InteractionQuestionMapper questionMapper;
     final UserClient userclient;
+    final RemarkClient remarkClient;
 
     @Override
     public void saveReply(ReplyDTO replyDTO) {
@@ -96,6 +98,7 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
         //3.填充其他字段
         HashSet<Long> uIds = new HashSet<>();
         HashSet<Long> targetReplyIds = new HashSet<>();
+        HashSet<Long> answerIds = new HashSet<>();
 
         for (InteractionReply record : records) {
             if (!record.getAnonymity()) {
@@ -104,6 +107,9 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
             }
             if (record.getTargetReplyId() != null && record.getTargetReplyId() > 0) {
                 targetReplyIds.add(record.getTargetReplyId());
+            }
+            if (record.getAnswerId() != null && record.getAnswerId() > 0) {
+                answerIds.add(record.getAnswerId());
             }
         }
         if (targetReplyIds.size() > 0) {
@@ -115,6 +121,7 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
             uIds.addAll(targetUserIds);
         }
 
+        Set<Long> bizLiked = remarkClient.isBizLiked((List<Long>) answerIds);
         List<UserDTO> userDTOS = userclient.queryUserByIds(uIds);
         Map<Long, UserDTO> userDTOMap = new HashMap<>();
         if (userDTOS != null) {
@@ -135,6 +142,7 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
             if(targetUserDTO!=null){
                 replyVO.setTargetUserName(targetUserDTO.getName());
             }
+            replyVO.setLiked(bizLiked.contains(record.getId()));
             voList.add(replyVO);
         }
         return PageDTO.of(page,voList);

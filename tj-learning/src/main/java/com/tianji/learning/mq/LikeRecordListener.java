@@ -17,6 +17,9 @@ import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * @description:
  * @Author：kyle
@@ -31,7 +34,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor//使用构造器
 public class LikeRecordListener {
 
-     final IInteractionReplyService replyService;
+    final IInteractionReplyService replyService;
 //    public LessonChangeListener(ILearningLessonService lessonService) {
 //        this.lessonService = lessonService;
 //    }
@@ -40,15 +43,18 @@ public class LikeRecordListener {
             durable = "true"),
             exchange = @Exchange(value = MqConstants.Exchange.LIKE_RECORD_EXCHANGE, type = ExchangeTypes.TOPIC),
             key = MqConstants.Key.QA_LIKED_TIMES_KEY))
-    public void onMsg(LikedTimesDTO dto) {
-        log.info("LikeRecordListener 接收到了信息 课程名{}：点赞数量{}",dto.getBizId(),dto.getLikedTimes());
+    public void onMsg(List<LikedTimesDTO> likedTimesDTOList) {
+        log.info("LikeRecordListener 接收到了信息{}", likedTimesDTOList);
         //1.校验参数是否正确
-        InteractionReply reply = replyService.getById(dto.getBizId());
-        if(reply==null){
-            return;
+        List<InteractionReply> list = new ArrayList<>();
+        for (LikedTimesDTO dto : likedTimesDTOList) {
+            InteractionReply reply = new InteractionReply();
+            reply.setLikedTimes(dto.getLikedTimes());
+            reply.setId(dto.getBizId());
+            list.add(reply);
         }
-        reply.setLikedTimes(dto.getLikedTimes());
-        replyService.updateById(reply);
+        replyService.updateBatchById(list);
+        //replyService.updateById(reply);
     }
 
 }
